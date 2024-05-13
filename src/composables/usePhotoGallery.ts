@@ -1,4 +1,11 @@
+import { ref, onMounted, watch } from 'vue';
+import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
+import { Filesystem, Directory } from '@capacitor/fileSystem';
+import { Preferences } from '@capacitor/preferences';
+
+
 const photos = ref<UserPhoto[]>([]);
+const PHOTO_STORAGE = "photos";
 const convertBlobToBase64 = (blob: Blob) =>
     new Promise ((resolve, reject) => {
         const reader = new FileReader();
@@ -11,7 +18,30 @@ const convertBlobToBase64 = (blob: Blob) =>
 const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> => {
     const response = await fetch(photo.webPath!);
     const blob = await response.blob();
+    const cachePhotos = () => {
+        Preferences.set({
+            key: PHOTO_STORAGE,
+            value: JSON.stringify(photos.value),
+        });
+        watch(photos, cachePhotos);
+    };
     const base64Data = (await convertBlobToBase64(blob)) as string;
+
+    const loadSaved = async () => {
+        const photoList = await Preferences.get({ key: PHOTO_STORAGE });
+        const photosInPreferences = photoList.value ? JSON.parse(photoList.value) : [];
+
+        for (const photo of photosInPreferences) {
+            const file = await Filesystem.readFile({
+                path: photo.filepath,
+                directory: Directory.Data,
+            });
+            photo.webviewPath = `data:image-jpeg;base64,${file.data}`;
+        }
+        photos.value = photosInPreferences;
+    };
+
+    onMounted(loadSaved);
 
     const saveFile = await Filesystem.writeFile({
         path: fileName,
@@ -24,11 +54,6 @@ const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> =>
         webviewPath: photo.webPath,
     };
 };
-
-import { ref, onMounted, watch } from 'vue';
-import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-import { Filesystem, Directory } from '@capacitor/fileSystem';
-import { Preferences } from '@capacitor/preferences';
 
 export interface UserPhoto {
     filepath: string;
