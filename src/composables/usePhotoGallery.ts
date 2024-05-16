@@ -1,6 +1,6 @@
 import { ref, onMounted, watch } from 'vue';
 import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-import { Filesystem, Directory } from '@capacitor/fileSystem';
+import { Filesystem, Directory } from '@capacitor/filesystem'; // Cambiado de '@capacitor/fileSystem' a '@capacitor/filesystem'
 import { Preferences } from '@capacitor/preferences';
 import { isPlatform } from '@ionic/vue';
 import { Capacitor } from '@capacitor/core';
@@ -9,11 +9,11 @@ import { Capacitor } from '@capacitor/core';
 const photos = ref<UserPhoto[]>([]);
 const PHOTO_STORAGE = "photos";
 const convertBlobToBase64 = (blob: Blob) =>
-    new Promise ((resolve, reject) => {
+    new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = reject;
         reader.onload = () => {
-            resolve(reader.result);
+            resolve(reader.result as string); 
         };
         reader.readAsDataURL(blob);
     });
@@ -27,7 +27,7 @@ const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> =>
     } else {
         const response = await fetch(photo.webPath!);
         const blob = await response.blob();
-        base64Data = (await convertBlobToBase64(blob)) as string;
+        base64Data = await convertBlobToBase64(blob); // Esperar la promesa convertBlobToBase64
     }
     const savedFile = await Filesystem.writeFile({
         path: fileName,
@@ -48,50 +48,30 @@ const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> =>
     }
 };
 
+const cachePhotos = () => {
+    Preferences.set({
+        key: PHOTO_STORAGE,
+        value: JSON.stringify(photos.value),
+    });
+};
 
+const loadSaved = async () => {
+    const photoList = await Preferences.get({ key: PHOTO_STORAGE });
+    const photosInPreferences = photoList.value ? JSON.parse(photoList.value) : [];
 
-
-    const response = await fetch(photo.webPath!);
-    const blob = await response.blob();
-    const cachePhotos = () => {
-        Preferences.set({
-            key: PHOTO_STORAGE,
-            value: JSON.stringify(photos.value),
-        });
-        watch(photos, cachePhotos);
-    };
-    const base64Data = (await convertBlobToBase64(blob)) as string;
-
-    const loadSaved = async () => {
-        const photoList = await Preferences.get({ key: PHOTO_STORAGE });
-        const photosInPreferences = photoList.value ? JSON.parse(photoList.value) : [];
-
-        if (!isPlatform('hybrid')) {
-
+    if (!isPlatform('hybrid')) {
         for (const photo of photosInPreferences) {
             const file = await Filesystem.readFile({
                 path: photo.filepath,
                 directory: Directory.Data,
             });
-            photo.webviewPath = `data:image-jpeg;base64,${file.data}`;
+            photo.webviewPath = `data:image/jpeg;base64,${file.data}`; // Cambiado de image-jpeg a jpeg
         }
     }
-        photos.value = photosInPreferences;
-    };
-
-    onMounted(loadSaved);
-
-    const saveFile = await Filesystem.writeFile({
-        path: fileName,
-        data: base64Data,
-        directory: Directory.Data,
-    });
-
-    return {
-        filepath: fileName,
-        webviewPath: photo.webPath,
-    };
+    photos.value = photosInPreferences;
 };
+
+onMounted(loadSaved);
 
 export interface UserPhoto {
     filepath: string;
@@ -110,7 +90,6 @@ export const usePhotoGallery = () => {
         const savedFileImage = await savePicture(photo, fileName);
     
         photos.value = [savedFileImage, ...photos.value];
-        
     };
 
     return {

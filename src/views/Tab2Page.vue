@@ -49,7 +49,7 @@ const { photos, takePhoto } = usePhotoGallery();
   <ion-page>
     <ion-header>
       <ion-toolbar>
-        <ion-title>Photo Gallery</ion-title>
+        <ion-title>Photo Gallery Proyecto Final</ion-title>
       </ion-toolbar>
     </ion-header>
     <ion-content :fullscreen="true">
