@@ -1,24 +1,26 @@
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-import { Filesystem, Directory } from '@capacitor/filesystem'; // Cambiado de '@capacitor/fileSystem' a '@capacitor/filesystem'
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { isPlatform } from '@ionic/vue';
 import { Capacitor } from '@capacitor/core';
 
-
 const photos = ref<UserPhoto[]>([]);
 const PHOTO_STORAGE = "photos";
-const convertBlobToBase64 = (blob: Blob) =>
+
+const convertBlobToBase64 = (blob: Blob): Promise<string> =>
     new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = reject;
         reader.onload = () => {
-            resolve(reader.result as string); 
+            resolve(reader.result as string);
         };
         reader.readAsDataURL(blob);
     });
-const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> => {
-    let base64Data: string | Blob;
+
+const savePicture = async (photo: Photo, fileName: string): Promise<UserPhoto> => {
+    let base64Data: string;
+
     if (isPlatform('hybrid')) {
         const file = await Filesystem.readFile({
             path: photo.path!,
@@ -27,25 +29,19 @@ const savePicture = async(photo: Photo, fileName: string): Promise<UserPhoto> =>
     } else {
         const response = await fetch(photo.webPath!);
         const blob = await response.blob();
-        base64Data = await convertBlobToBase64(blob); // Esperar la promesa convertBlobToBase64
+        base64Data = await convertBlobToBase64(blob);
     }
-    const savedFile = await Filesystem.writeFile({
+
+    await Filesystem.writeFile({
         path: fileName,
         data: base64Data,
         directory: Directory.Data,
     });
 
-    if (isPlatform('hybrid')) {
-        return {
-            filepath: fileName,
-            webviewPath: photo.webPath,
-        };
-    } else {
-        return {
-            filepath: fileName,
-            webviewPath: photo.webPath,
-        };
-    }
+    return {
+        filepath: fileName,
+        webviewPath: isPlatform('hybrid') ? Capacitor.convertFileSrc(photo.path!) : photo.webPath,
+    };
 };
 
 const cachePhotos = () => {
@@ -65,7 +61,7 @@ const loadSaved = async () => {
                 path: photo.filepath,
                 directory: Directory.Data,
             });
-            photo.webviewPath = `data:image/jpeg;base64,${file.data}`; // Cambiado de image-jpeg a jpeg
+            photo.webviewPath = `data:image/jpeg;base64,${file.data}`;
         }
     }
     photos.value = photosInPreferences;
@@ -86,10 +82,11 @@ export const usePhotoGallery = () => {
             quality: 100,
         });
 
-        const fileName = Date.now() + '.jpeg';
+        const fileName = `${Date.now()}.jpeg`;
         const savedFileImage = await savePicture(photo, fileName);
-    
+
         photos.value = [savedFileImage, ...photos.value];
+        cachePhotos();
     };
 
     return {
